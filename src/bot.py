@@ -266,7 +266,7 @@ async def shutdown(ctx, timeout: str | None = "0"):
     except Exception:
         timeout_seconds = 0
 
-    shutdown_cmd = r"shutdown /s /t " + timeout_seconds
+    shutdown_cmd = r"shutdown /s /t " + str(timeout_seconds)
     result = execute_cmd(shutdown_cmd) or f"PC about to shutdown in {timeout_seconds}s"
     await ctx.reply(result)
 
@@ -284,7 +284,7 @@ async def restart(ctx, timeout: str | None = "0"):
     except Exception:
         timeout_seconds = 0
 
-    shutdown_cmd = r"shutdown /r /t " + timeout_seconds
+    shutdown_cmd = r"shutdown /r /t " + str(timeout_seconds)
     result = execute_cmd(shutdown_cmd) or f"PC about to restart in {timeout_seconds}s"
     await ctx.reply(result)
 
