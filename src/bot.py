@@ -243,11 +243,14 @@ async def msgbox(ctx, *, args: str):
     await msgbox_show(ctx, args)
 
 
+# ===========================
+# === INPUTBOX COMMAND ===
+# ===========================
 @bot.command(name="inputbox", description="Display a native windows input form")
 @commands.is_owner()
 @commands.guild_only()
-async def inputbox(ctx, title: str, *, prompt: str):
-    await inputbox_show(ctx, title, prompt)
+async def inputbox(ctx, *, prompt: str):
+    await inputbox_show(ctx, prompt)
 
 
 # ===========================
@@ -256,9 +259,15 @@ async def inputbox(ctx, title: str, *, prompt: str):
 @bot.command(name="shutdown", description="shutdown PC immediately")
 @commands.is_owner()
 @commands.guild_only()
-async def shutdown(ctx, timeout: str | None):
-    shutdown_cmd = r"shutdown /s /t " + int(timeout)
-    result = execute_cmd(shutdown_cmd) or f"PC about to shutdown in {int(timeout)}s"
+async def shutdown(ctx, timeout: str | None = "0"):
+    timeout_seconds = 0
+    try:
+        timeout_seconds = int(timeout)
+    except Exception:
+        timeout_seconds = 0
+
+    shutdown_cmd = r"shutdown /s /t " + timeout_seconds
+    result = execute_cmd(shutdown_cmd) or f"PC about to shutdown in {timeout_seconds}s"
     await ctx.reply(result)
 
 
@@ -268,9 +277,15 @@ async def shutdown(ctx, timeout: str | None):
 @bot.command(name="restart", description="restart PC immediately")
 @commands.is_owner()
 @commands.guild_only()
-async def restart(ctx, timeout: str | None):
-    shutdown_cmd = r"shutdown /r /t " + int(timeout)
-    result = execute_cmd(shutdown_cmd) or f"PC about to restart in {int(timeout)}s"
+async def restart(ctx, timeout: str | None = "0"):
+    timeout_seconds = 0
+    try:
+        timeout_seconds = int(timeout)
+    except Exception:
+        timeout_seconds = 0
+
+    shutdown_cmd = r"shutdown /r /t " + timeout_seconds
+    result = execute_cmd(shutdown_cmd) or f"PC about to restart in {timeout_seconds}s"
     await ctx.reply(result)
 
 
