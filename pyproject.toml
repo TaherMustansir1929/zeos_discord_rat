@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "discord>=2.3.2",
+    "psutil>=7.2.2",
     "python-dotenv>=1.2.4",
     "requests>=2.34.2",
 ]
