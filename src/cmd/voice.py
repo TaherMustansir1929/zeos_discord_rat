@@ -35,6 +35,9 @@ finally {
     try:
         await ctx.send("Speaking...")
 
+        # The speech needs its own PowerShell process: the script reads the
+        # text from stdin, which in the shared session of src/cmd/shell.py
+        # would swallow the queued commands instead.
         process = await asyncio.create_subprocess_exec(
             "powershell.exe",
             "-NoProfile",

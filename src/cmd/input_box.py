@@ -63,6 +63,9 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
 """
 
     def show_form() -> subprocess.CompletedProcess[str]:
+        # The form needs its own PowerShell process: the modal dialog blocks
+        # until it is closed and the script ends with `exit`, which would
+        # terminate the shared session of src/cmd/shell.py.
         return subprocess.run(
             ["powershell.exe", "-NoProfile", "-STA", "-Command", powershell_script],
             capture_output=True,

@@ -1,4 +1,5 @@
 import subprocess
+import threading
 
 ps: subprocess.Popen[str] = subprocess.Popen(
     ["powershell", "-NoLogo", "-NoExit", "-Command", "-"],
@@ -9,6 +10,9 @@ ps: subprocess.Popen[str] = subprocess.Popen(
     bufsize=1,
     creationflags=subprocess.CREATE_NO_WINDOW,
 )
+
+# Only one command may use the shared PowerShell session at a time.
+session_lock = threading.Lock()
 
 
 def execute_cmd(cmd: str) -> str:
@@ -25,14 +29,15 @@ def execute_cmd(cmd: str) -> str:
     if not ps.stdin or not ps.stdout:
         return "ps.stdin or ps.stdout object NOT FOUND"
 
-    ps.stdin.write(f"{wrapped}\n")
-    ps.stdin.write(f'Write-Output "{marker}"\n')
-    ps.stdin.flush()
+    with session_lock:
+        ps.stdin.write(f"{wrapped}\n")
+        ps.stdin.write(f'Write-Output "{marker}"\n')
+        ps.stdin.flush()
 
-    output: list[str] = []
-    for line in ps.stdout:
-        if marker in line:
-            break
-        output.append(line.rstrip())
+        output: list[str] = []
+        for line in ps.stdout:
+            if marker in line:
+                break
+            output.append(line.rstrip())
 
     return "\n".join(output)

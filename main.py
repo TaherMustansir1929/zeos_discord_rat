@@ -4,12 +4,17 @@ import sys
 from dotenv import load_dotenv
 
 from bot import bot
-from elevation import stop_existing_instances
+from src.utils.elevation import stop_existing_instances
+from src.utils.updater import helper_requested, run_helper
 
 load_dotenv()
 
 
 def main() -> None:
+    # The update helper replaces the executable and never starts the bot.
+    if helper_requested(sys.argv[1:]):
+        raise SystemExit(run_helper(sys.argv[2:]))
+
     if getattr(sys, "frozen", False):
         stop_existing_instances()
 

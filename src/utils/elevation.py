@@ -7,7 +7,7 @@ from pathlib import Path
 
 import psutil
 
-from src.constants import APP_NAME
+from src.constants import APP_NAME, INSTALL_DIR
 
 # --------------------------------------------------
 # Configuration
@@ -16,9 +16,7 @@ from src.constants import APP_NAME
 EXE_NAME = f"{APP_NAME}.exe"
 TASK_NAME = APP_NAME
 
-PROGRAM_FILES = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-
-INSTALL_DIR = PROGRAM_FILES / APP_NAME
+# The runtime lives in the same folder the installer uses.
 INSTALL_EXE = INSTALL_DIR / EXE_NAME
 
 MB_YESNO = 0x00000004

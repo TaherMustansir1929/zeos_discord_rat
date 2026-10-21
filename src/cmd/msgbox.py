@@ -91,6 +91,9 @@ exit 2
 """
 
     def show_popup() -> subprocess.CompletedProcess[str]:
+        # The dialog needs its own PowerShell process: the modal dialog blocks
+        # until an option is picked and the script ends with `exit`, which
+        # would terminate the shared session of src/cmd/shell.py.
         return subprocess.run(
             [
                 "powershell.exe",

