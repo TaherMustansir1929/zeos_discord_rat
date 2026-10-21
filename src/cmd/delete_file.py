@@ -2,12 +2,16 @@ import os
 import shutil
 from pathlib import Path
 
+from discord import Message
+from discord.ext import commands
 from discord.ext.commands import Context
 
 CONFIRMATION_TIMEOUT = 30  # seconds
 
 
-async def delete_file(bot, ctx: Context, path: str):
+async def delete_file(
+    bot: commands.Bot, ctx: Context[commands.Bot], path: str
+) -> None:
     path = os.path.expandvars(os.path.expanduser(path.strip().strip('"')))
 
     target = Path(path)
@@ -40,7 +44,7 @@ async def delete_file(bot, ctx: Context, path: str):
         f"You have {CONFIRMATION_TIMEOUT} seconds."
     )
 
-    def check(m):
+    def check(m: Message) -> bool:
         return (
             m.author.id == ctx.author.id
             and m.channel.id == ctx.channel.id
@@ -48,7 +52,7 @@ async def delete_file(bot, ctx: Context, path: str):
         )
 
     try:
-        response = await bot.wait_for(
+        response: Message = await bot.wait_for(
             "message", check=check, timeout=CONFIRMATION_TIMEOUT
         )
     except TimeoutError:

@@ -2,12 +2,11 @@ from io import BytesIO
 
 import discord
 import pyautogui
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def take_screenshot(ctx: Context):
-    """Capture the bot host's screen and upload it to this channel."""
-
+async def take_screenshot(ctx: Context[commands.Bot]) -> None:
     try:
         # Capture the screen into memory.
         image_buffer = BytesIO()

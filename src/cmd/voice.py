@@ -1,9 +1,10 @@
 import asyncio
 
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def voice_api(ctx: Context, text: str):
+async def voice_api(ctx: Context[commands.Bot], text: str) -> None:
     text = text.strip()
 
     if not text:
@@ -50,7 +51,7 @@ finally {
                 process.communicate(input=text.encode("utf-8")),
                 timeout=60,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             await process.wait()
             await ctx.send("Speech timed out.")
@@ -58,7 +59,7 @@ finally {
 
         if process.returncode != 0:
             await ctx.send("Windows text-to-speech failed.")
-            print(stderr.decode("utf-8", errors="replace"))
+            print((stderr or b"").decode("utf-8", errors="replace"))
 
     except Exception as exc:
         print(f"Speech error: {exc}")

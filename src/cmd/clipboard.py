@@ -1,14 +1,18 @@
 import asyncio
+import io
 
 import discord
 import pyperclip
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def get_clipboard(ctx: Context, action: str = "read", text: str = None):
+async def get_clipboard(
+    ctx: Context[commands.Bot], action: str = "read", text: str | None = None
+) -> None:
     try:
         if action.lower() == "read":
-            content = await asyncio.to_thread(pyperclip.paste)
+            content: str = await asyncio.to_thread(pyperclip.paste)
 
             if not content:
                 await ctx.reply("The clipboard is empty or contains no text.")
@@ -16,8 +20,6 @@ async def get_clipboard(ctx: Context, action: str = "read", text: str = None):
 
             # Send long text as a file to avoid Discord's message limit.
             if len(content) > 1900:
-                import io
-
                 file = discord.File(
                     io.BytesIO(content.encode("utf-8")), filename="clipboard.txt"
                 )

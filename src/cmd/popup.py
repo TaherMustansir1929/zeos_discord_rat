@@ -1,9 +1,10 @@
 import subprocess
 
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def popup_show(ctx: Context, message: str):
+async def popup_show(ctx: Context[commands.Bot], message: str) -> None:
     # Escape single quotes for PowerShell.
     safe_message = message.replace("'", "''")
 

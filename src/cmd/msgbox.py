@@ -4,10 +4,11 @@ import os
 import re
 import subprocess
 
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def msgbox_show(ctx: Context, args: str):
+async def msgbox_show(ctx: Context[commands.Bot], args: str) -> None:
     # Extract the quoted prompt from the end of the input.
     match = re.search(r'"([^"]*)"\s*$', args)
 
@@ -89,7 +90,7 @@ if ($null -ne $form.Tag) {
 exit 2
 """
 
-    def show_popup():
+    def show_popup() -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 "powershell.exe",

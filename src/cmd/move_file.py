@@ -2,8 +2,11 @@ import asyncio
 import shutil
 from pathlib import Path
 
+from discord.ext import commands
+from discord.ext.commands import Context
 
-async def move_file(ctx, paths: str):
+
+async def move_file(ctx: Context[commands.Bot], paths: str) -> None:
     import shlex
 
     try:

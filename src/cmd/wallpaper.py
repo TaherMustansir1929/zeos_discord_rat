@@ -3,10 +3,11 @@ import ctypes
 import tempfile
 from pathlib import Path
 
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def set_wallpaper(ctx: Context):
+async def set_wallpaper(ctx: Context[commands.Bot]) -> None:
     # Find an image attached to the command message.
     attachment = next(
         (
@@ -44,7 +45,7 @@ async def set_wallpaper(ctx: Context):
         SPIF_UPDATEINIFILE = 1
         SPIF_SENDCHANGE = 2
 
-        def set_wallpaper():
+        def set_wallpaper() -> None:
             result = ctypes.windll.user32.SystemParametersInfoW(
                 SPI_SETDESKWALLPAPER,
                 0,

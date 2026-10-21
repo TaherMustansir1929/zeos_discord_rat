@@ -2,10 +2,11 @@ import asyncio
 import webbrowser
 from urllib.parse import urlparse
 
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def spawn_proc(ctx: Context, url: str):
+async def spawn_proc(ctx: Context[commands.Bot], url: str) -> None:
     url = url.strip()
 
     # Add HTTPS automatically if no scheme is provided.

@@ -1,6 +1,6 @@
 import subprocess
 
-ps = subprocess.Popen(
+ps: subprocess.Popen[str] = subprocess.Popen(
     ["powershell", "-NoLogo", "-NoExit", "-Command", "-"],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
@@ -29,7 +29,7 @@ def execute_cmd(cmd: str) -> str:
     ps.stdin.write(f'Write-Output "{marker}"\n')
     ps.stdin.flush()
 
-    output = []
+    output: list[str] = []
     for line in ps.stdout:
         if marker in line:
             break

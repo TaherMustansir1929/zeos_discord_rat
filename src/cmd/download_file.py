@@ -2,10 +2,11 @@ import os
 from pathlib import Path
 
 import discord
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def download_file(ctx: Context, path: str):
+async def download_file(ctx: Context[commands.Bot], path: str) -> None:
     """Resolve a file path and send the file to Discord."""
 
     path = os.path.expandvars(os.path.expanduser(path.strip().strip('"')))

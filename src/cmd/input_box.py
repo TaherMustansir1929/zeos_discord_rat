@@ -2,10 +2,11 @@ import asyncio
 import os
 import subprocess
 
+from discord.ext import commands
 from discord.ext.commands import Context
 
 
-async def inputbox_show(ctx: Context, prompt: str):
+async def inputbox_show(ctx: Context[commands.Bot], prompt: str) -> None:
     # Pass user-provided text through environment variables
     # rather than inserting it directly into PowerShell code.
     env = os.environ.copy()
@@ -61,7 +62,7 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
 }
 """
 
-    def show_form():
+    def show_form() -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["powershell.exe", "-NoProfile", "-STA", "-Command", powershell_script],
             capture_output=True,

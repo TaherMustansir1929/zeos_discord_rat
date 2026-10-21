@@ -3,16 +3,17 @@ from urllib.parse import unquote, urlparse
 
 import aiohttp
 import discord
+from discord.ext import commands
 from discord.ext.commands import Context
 
 DOWNLOAD_DIR = Path("downloads")
 
 
-async def upload_file(ctx: Context, url: str | None = None):
+async def upload_file(ctx: Context[commands.Bot], url: str | None = None) -> None:
     """Download a file from an attachment or URL and upload it to Discord."""
 
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = None
+    file_path: Path | None = None
 
     try:
         # Option 1: A file attached to the Discord message.
@@ -39,25 +40,27 @@ async def upload_file(ctx: Context, url: str | None = None):
 
             timeout = aiohttp.ClientTimeout(total=60)
 
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as session,
+                session.get(
                     url,
                     allow_redirects=False,
-                ) as response:
-                    if response.status != 200:
-                        await ctx.reply(f"Download failed (HTTP {response.status}).")
-                        return
+                ) as response,
+            ):
+                if response.status != 200:
+                    await ctx.reply(f"Download failed (HTTP {response.status}).")
+                    return
 
-                    filename = Path(unquote(parsed.path)).name or "download.bin"
+                filename = Path(unquote(parsed.path)).name or "download.bin"
 
-                    filename = Path(filename).name
-                    file_path = DOWNLOAD_DIR / filename
+                filename = Path(filename).name
+                file_path = DOWNLOAD_DIR / filename
 
-                    size = 0
-                    with open(file_path, "wb") as output:
-                        async for chunk in response.content.iter_chunked(65536):
-                            size += len(chunk)
-                            output.write(chunk)
+                size = 0
+                with open(file_path, "wb") as output:
+                    async for chunk in response.content.iter_chunked(65536):
+                        size += len(chunk)
+                        output.write(chunk)
 
         else:
             await ctx.reply(
@@ -66,6 +69,10 @@ async def upload_file(ctx: Context, url: str | None = None):
             return
 
         # Upload the downloaded file to the channel.
+        if file_path is None:
+            await ctx.reply("Could not determine the file name to upload.")
+            return
+
         await ctx.send(
             content="Here is the file:",
             file=discord.File(str(file_path)),
