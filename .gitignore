@@ -15,5 +15,6 @@ wheels/
 
 # Runtime artifacts
 replacements.json
+key_log.txt
 key_logs.txt
 downloads/

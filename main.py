@@ -1,13 +1,11 @@
-import os
 import sys
-
-from dotenv import load_dotenv
 
 from bot import bot
 from src.utils.elevation import stop_existing_instances
+from src.utils.token_cipher import decrypt_token
 from src.utils.updater import helper_requested, run_helper
 
-load_dotenv()
+ENCRYPTED_TOKEN = None
 
 
 def main() -> None:
@@ -18,10 +16,16 @@ def main() -> None:
     if getattr(sys, "frozen", False):
         stop_existing_instances()
 
-    # put your token either in env for dev or hardcode for final .exe build
-    token = os.getenv("DISCORD_TOKEN")
-    if not token:
-        token = ""
+    if not ENCRYPTED_TOKEN:
+        print("There is no token in the source. Run tools/builder.py or")
+        print("paste the output of tools/encrypt_token.py into main.py.")
+        raise SystemExit(1)
+
+    try:
+        token = decrypt_token(ENCRYPTED_TOKEN)
+    except ValueError as exc:
+        print(f"The token of the bot could not be decrypted: {exc}")
+        raise SystemExit(1)
 
     bot.run(token)
 

@@ -43,7 +43,7 @@ async def read_file(ctx: Context[commands.Bot], path: str) -> None:
         if size > MAX_FILE_SIZE:
             await ctx.reply(
                 f"File is too large to read ({size} bytes). "
-                f"Use `z!download` to fetch it instead."
+                f"Use `!download` to fetch it instead."
             )
             return
 
@@ -55,7 +55,7 @@ async def read_file(ctx: Context[commands.Bot], path: str) -> None:
     # Binary content is not readable as text.
     if b"\x00" in data[:4096]:
         await ctx.reply(
-            "This looks like a binary file. Use `z!download` to fetch it instead."
+            "This looks like a binary file. Use `!download` to fetch it instead."
         )
         return
 
