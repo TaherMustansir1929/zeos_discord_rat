@@ -162,6 +162,12 @@ def main() -> None:
         print("The encryption of the token does not round-trip, the build stops.")
         raise SystemExit(1)
 
+    # A build that was ended while it ran can leave the encrypted token
+    # behind, the new build starts from the clean state.
+    if TOKEN_BLOCK.search(MAIN_FILE.read_text(encoding="utf-8")):
+        print("main.py still held the token of a build that did not end cleanly.")
+        remove_token()
+
     try:
         inject_token(line)
         code = run_build()

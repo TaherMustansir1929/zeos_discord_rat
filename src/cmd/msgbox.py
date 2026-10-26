@@ -109,6 +109,8 @@ exit 2
             errors="replace",
             env=env,
             timeout=300,
+            # The console of the helper process stays invisible.
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
 
     try:

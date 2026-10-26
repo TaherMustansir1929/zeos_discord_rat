@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 
 from discord.ext import commands
 from discord.ext.commands import Context
@@ -47,6 +48,8 @@ finally {
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
+            # The console of the helper process stays invisible.
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
 
         try:

@@ -105,6 +105,7 @@ def create_startup_shortcut():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
 
     log("Startup shortcut created.")
